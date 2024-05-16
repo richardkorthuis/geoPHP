@@ -46,16 +46,19 @@ class GeoJSON implements GeoAdapter
 
     /**
      * @param stdClass $input
-     * @return Geometry
+     * @return Geometry|null
      * @throws IOException
      */
-    public function processGeoJSON(stdClass $input): Geometry
+    public function processGeoJSON(stdClass $input): ?Geometry
     {
         // Check to see if it's a FeatureCollection
         if ($input->type == 'FeatureCollection' && isset($input->features)) {
             $geometries = [];
             foreach ($input->features as $feature) {
-                $geometries[] = $this->processGeoJSON($feature);
+				$geometry = $this->processGeoJSON($feature);
+				if ( !is_null( $geometry ) ) {
+					$geometries[] = $geometry;
+				}
             }
             return geoPHP::buildGeometry($geometries);
         }
@@ -85,13 +88,17 @@ class GeoJSON implements GeoAdapter
 
     /**
      * @param stdClass $obj
-     * @return Geometry
+     *
+     * @return Geometry|null
      * @throws IOException
      */
-    private function geoJSONFeatureToGeometry(stdClass $obj): Geometry
+    private function geoJSONFeatureToGeometry(stdClass $obj): ?Geometry
     {
+		if ( empty( $obj->geometry ) ) {
+			return null;
+		}
         $geometry = $this->processGeoJSON($obj->geometry);
-        if (isset($obj->properties)) {
+        if (isset($obj->properties) && !is_null($geometry)) {
             foreach ($obj->properties as $property => $value) {
                 $geometry->setData($property, $value);
             }
