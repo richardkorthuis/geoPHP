@@ -55,8 +55,8 @@ class KML implements GeoAdapter
     public function read(string $kml): Geometry
     {
         // Change to lower-case and strip all CDATA
-        $kml = mb_strtolower($kml, mb_detect_encoding($kml));
-        $kml = preg_replace('/<!\[cdata\[(.*?)\]\]>/s', '', $kml);
+        //$kml = mb_strtolower($kml, mb_detect_encoding($kml));
+        //$kml = preg_replace('/<!\[cdata\[(.*?)\]\]>/s', '', $kml);
 
         // Load into DOMDocument
         $this->xmlObject = new \DOMDocument();
@@ -78,7 +78,7 @@ class KML implements GeoAdapter
     protected function geomFromXML(): Geometry
     {
         $geometries = [];
-        $placemarkElements = $this->xmlObject->getElementsByTagName('placemark');
+        $placemarkElements = $this->xmlObject->getElementsByTagName('Placemark');
         if ($placemarkElements->length) {
             foreach ($placemarkElements as $placemark) {
                 $data = [];
@@ -86,10 +86,30 @@ class KML implements GeoAdapter
                 $geometry = null;
                 foreach ($placemark->childNodes as $child) {
                     // Node names are all the same, except for MultiGeometry, which maps to GeometryCollection
-                    $nodeName = $child->nodeName == 'multigeometry' ? 'geometrycollection' : $child->nodeName;
+                    $nodeName = strtolower( $child->nodeName ) == 'multigeometry' ? 'geometrycollection' : strtolower( $child->nodeName );
                     if (array_key_exists($nodeName, geoPHP::getGeometryList())) {
                         $function = 'parse' . geoPHP::getGeometryList()[$nodeName];
                         $geometry = $this->$function($child);
+                    } elseif ( $child->nodeName == 'ExtendedData' ) {
+						foreach ( $child->childNodes as $ext ) {
+							switch( $ext->nodeName ) {
+								case 'Data':
+									$value = $ext->getElementsByTagName( 'value' );
+									$data[ $ext->getAttribute('name') ] = $ext->nodeValue;
+									break;
+								case 'SchemaData':
+									$simpleDatas = $ext->getElementsByTagName( 'SimpleData' );
+									if ( $simpleDatas->length ) {
+										foreach ( $simpleDatas as $simpleData ) {
+											$data[ $simpleData->getAttribute('name') ] = $simpleData->nodeValue;
+										}
+									}
+									break;
+								default:
+									$x = 2;
+									break;
+							}
+						}
                     } elseif ($child->nodeType === 1) {
                         $data[$child->nodeName] = $child->nodeValue;
                     }
@@ -104,9 +124,9 @@ class KML implements GeoAdapter
             return new GeometryCollection($geometries);
         } else {
             // The document does not have a placemark, try to create a valid geometry from the root element
-            $nodeName = $this->xmlObject->documentElement->nodeName == 'multigeometry'
+            $nodeName = strtolower( $this->xmlObject->documentElement->nodeName ) == 'multigeometry'
                 ? 'geometrycollection'
-                : $this->xmlObject->documentElement->nodeName;
+                : strtolower( $this->xmlObject->documentElement->nodeName );
             if (array_key_exists($nodeName, geoPHP::getGeometryList())) {
                 $function = 'parse' . geoPHP::getGeometryList()[$nodeName];
                 return $this->$function($this->xmlObject->documentElement);
@@ -175,20 +195,20 @@ class KML implements GeoAdapter
         $components = [];
 
         /** @noinspection SpellCheckingInspection */
-        $outerBoundaryIs = $this->childElements($xml, 'outerboundaryis');
+        $outerBoundaryIs = $this->childElements($xml, 'outerBoundaryIs');
         if (!$outerBoundaryIs) {
             return new Polygon();
         }
         $outerBoundaryElement = $outerBoundaryIs[0];
         /** @noinspection SpellCheckingInspection */
-        $outerRingElement = @$this->childElements($outerBoundaryElement, 'linearring')[0];
+        $outerRingElement = @$this->childElements($outerBoundaryElement, 'LinearRing')[0];
         $components[] = $this->parseLineString($outerRingElement);
 
         /** @noinspection SpellCheckingInspection */
-        $innerBoundaryElementIs = $this->childElements($xml, 'innerboundaryis');
+        $innerBoundaryElementIs = $this->childElements($xml, 'innerBoundaryIs');
         foreach ($innerBoundaryElementIs as $innerBoundaryElement) {
             /** @noinspection SpellCheckingInspection */
-            foreach ($this->childElements($innerBoundaryElement, 'linearring') as $innerRingElement) {
+            foreach ($this->childElements($innerBoundaryElement, 'LinearRing') as $innerRingElement) {
                 $components[] = $this->parseLineString($innerRingElement);
             }
         }
@@ -201,12 +221,13 @@ class KML implements GeoAdapter
         $components = [];
         $geometryTypes = geoPHP::getGeometryList();
         foreach ($xml->childNodes as $child) {
+			$nodeName = strtolower( $child->nodeName );
             /** @noinspection SpellCheckingInspection */
-            $nodeName = ($child->nodeName == 'linearring')
+            $nodeName = ($nodeName == 'linearring')
                     ? 'linestring'
-                    : ($child->nodeName == 'multigeometry'
+                    : ($nodeName == 'multigeometry'
                             ? 'geometrycollection'
-                            : $child->nodeName);
+                            : $nodeName);
             if (array_key_exists($nodeName, $geometryTypes)) {
                 $function = 'parse' . $geometryTypes[$nodeName];
                 $components[] = $this->$function($child);
