@@ -65,7 +65,7 @@ class GeoRSS implements GeoAdapter
             $this->parseCircles()
         );
 
-        return geoPHP::geometryReduce($geometries);
+        return geoPHP::geometryReduce($geometries) ?? new GeometryCollection([]);
     }
 
     /**
